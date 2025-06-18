@@ -291,6 +291,7 @@ class CNMF(object):
         self.estimates = Estimates(A=Ain, C=Cin, b=b_in, f=f_in,
                                    dims=self.params.data['dims'])
 
+
     def __str__(self):
         ret = f"Caiman CNMF Object. subfields:{list(self.__dict__.keys()) }"
         if hasattr(self.estimates, 'A') and self.estimates.A is not None:
@@ -315,6 +316,8 @@ class CNMF(object):
     def __getitem__(self, idx):
         return getattr(self, idx)
     # We want subscripting to be read-only so we do not define a __setitem__ method
+
+
 
     def fit_file(self, motion_correct=False, indices=None, include_eval=False, output_dir=None, return_mc=False):
         """
@@ -351,6 +354,13 @@ class CNMF(object):
         else:
             logger.error(f"Error: File not found, with file list:\n{fnames[0]}")
             raise Exception('File not found!')
+
+        caiman_temp = os.environ.get("CAIMAN_TEMP")
+        if output_dir is not None:
+            # update CAIMAN_TEMP to point to `output_dir`
+            output_dir = pathlib.Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            os.environ["CAIMAN_TEMP"] = str(output_dir)
 
         base_name = pathlib.Path(fnames[0]).stem + "_memmap_"
         if extension == '.mmap':
@@ -396,7 +406,12 @@ class CNMF(object):
         Cn[np.isnan(Cn)] = 0
         fname_init_hdf5 = fname_new[:-5] + '_init.hdf5'
         fit_cnm.save(fname_init_hdf5)
+
         # Rerun seeded CNMF on accepted patches to refine and perform deconvolution
+
+        #fit_cnm.params.change_params({'p': self.params.get('preprocess', 'p')})
+        # RE-RUN seeded CNMF on accepted patches to refine and perform deconvolution
+
         cnm2 = fit_cnm.refit(images, dview=self.dview)
         cnm2.estimates.evaluate_components(images, cnm2.params, dview=self.dview)
         # Extract DF/F values
@@ -411,6 +426,7 @@ class CNMF(object):
         for log_file in log_files:
             os.remove(log_file)
 
+
         if output_dir is not None:
             # copy the result files to the specified output directory
             output_dir = pathlib.Path(output_dir)
@@ -420,6 +436,13 @@ class CNMF(object):
             for f in files_to_move:
                 f = pathlib.Path(f)
                 shutil.copy2(f, output_dir)
+
+        # revert CAIMAN_TEMP to its original value
+        if caiman_temp is not None:
+            os.environ["CAIMAN_TEMP"] = caiman_temp
+        else:
+            del os.environ["CAIMAN_TEMP"]
+
 
         if return_mc & motion_correct:
             return cnm2, mc
