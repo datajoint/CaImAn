@@ -36,21 +36,24 @@ from caiman.utils.utils import download_demo, download_model
 def main():
     cfg = handle_args()
 
-    if cfg.logfile:
-        logging.basicConfig(format=
-            "[%(filename)s:%(funcName)20s():%(lineno)s] %(message)s",
-            level=logging.INFO,
-            filename=cfg.logfile)
-        # You can make the output more or less verbose by setting level to logging.DEBUG, logging.INFO, logging.WARNING, or logging.ERROR
-    else:
-        logging.basicConfig(format=
-            "[%(filename)s:%(funcName)20s():%(lineno)s] %(message)s",
-            level=logging.INFO)
+    # Set up logging
+    logger = logging.getLogger("caiman")
+    logger.setLevel(logging.INFO) # Or another loglevel
+    logfmt = logging.Formatter("[%(filename)s:%(funcName)20s():%(lineno)s] %(message)s")
 
+    if cfg.logfile:
+        handler = logging.FileHandler(cfg.logfile)
+    else:
+        handler = logging.StreamHandler()
+
+    handler.setFormatter(logfmt)
+    logger.addHandler(handler)
+
+    # Figure out what data we're working on
     if cfg.input is None:
         # If no input is specified, use sample data, downloading if necessary
-        fnames    = [download_demo('demo_voltage_imaging.hdf5', 'volpy')] # XXX do we need to use a separate directory?
-        path_ROIs = [download_demo('demo_voltage_imaging_ROIs.hdf5', 'volpy')]
+        fnames    = [download_demo('demo_voltage_imaging.hdf5')] # XXX do we need to use a separate directory?
+        path_ROIs = [download_demo('demo_voltage_imaging_ROIs.hdf5')]
     else:
         fnames = cfg.input
         path_ROIs = cfg.pathinput
@@ -71,7 +74,7 @@ def main():
     max_deviation_rigid = 3                         # maximum deviation allowed for patch with respect to rigid shifts
     border_nan = 'copy'
 
-    params_dict = {'fnames': fnames,
+    opts_dict = {'fnames': fnames,
                    'fr': fr,
                    'pw_rigid': pw_rigid,
                    'max_shifts': max_shifts,
@@ -81,7 +84,7 @@ def main():
                    'max_deviation_rigid': max_deviation_rigid,
                    'border_nan': border_nan}
 
-    opts = volparams(params_dict=params_dict)
+    opts = volparams(params_dict=opts_dict)
 
     # play the movie (optional)
     # playing the movie using opencv. It requires loading the movie in memory.
@@ -164,7 +167,7 @@ def main():
 
     elif cfg.method == 'gui_annotation':
         # run volpy_gui.py file in the caiman/source_extraction/volpy folder
-        gui_ROIs =  caiman_datadir() + '/example_movies/volpy/gui_roi.hdf5'
+        gui_ROIs =  os.path.join(caiman_datadir(), 'example_movies', 'gui_roi.hdf5')
         with h5py.File(gui_ROIs, 'r') as fl:
             ROIs = fl['mov'][()]
 
@@ -218,7 +221,7 @@ def main():
                'weight_update': weight_update,
                'n_iter': n_iter}
 
-    opts.change_params(params_dict=params_dict);          
+    opts.change_params(params_dict=opts_dict);          
 
     # TRACE DENOISING AND SPIKE DETECTION
     vpy = VOLPY(n_processes=n_processes, dview=dview, params=opts)

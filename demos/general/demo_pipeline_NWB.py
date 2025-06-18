@@ -36,17 +36,18 @@ from caiman.utils.utils import download_demo
 
 def main():
     cfg = handle_args()
+    # Set up logging
+    logger = logging.getLogger("caiman")
+    logger.setLevel(logging.INFO) # Or another loglevel
+    logfmt = logging.Formatter("[%(filename)s:%(funcName)20s():%(lineno)s] %(message)s")
 
     if cfg.logfile:
-        logging.basicConfig(format=
-            "[%(filename)s:%(funcName)20s():%(lineno)s] %(message)s",
-            level=logging.INFO,
-            filename=cfg.logfile)
-        # You can make the output more or less verbose by setting level to logging.DEBUG, logging.INFO, logging.WARNING, or logging.ERROR
+        handler = logging.FileHandler(cfg.logfile)
     else:
-        logging.basicConfig(format=
-            "[%(filename)s:%(funcName)20s():%(lineno)s] %(message)s",
-            level=logging.INFO)
+        handler = logging.StreamHandler()
+
+    handler.setFormatter(logfmt)
+    logger.addHandler(handler)
 
     opts = params.CNMFParams(params_from_file=cfg.configfile)
     if cfg.input is not None:
@@ -164,7 +165,7 @@ def main():
     saved_p = opts.preprocess['p'] # Save the deconvolution parameter for later restoration
     opts.change_params({'preprocess': {'p': 0}, 'temporal': {'p': 0}})
     cnm = cnmf.CNMF(n_processes, params=opts, dview=dview)
-    cnm = cnm.fit(images)
+    cnm.fit(images)
 
     # ALTERNATE WAY TO RUN THE PIPELINE AT ONCE (optional)
     
