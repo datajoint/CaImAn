@@ -315,7 +315,7 @@ class CNMF(object):
         return getattr(self, idx)
     # We want subscripting to be read-only so we do not define a __setitem__ method
 
-    def fit_file(self, motion_correct=False, indices=None, include_eval=False):
+    def fit_file(self, motion_correct=False, indices=None, include_eval=False, output_dir=None, return_mc=False):
         """
         This method packages the analysis pipeline (motion correction, memory
         mapping, patch based CNMF processing and component evaluation) in a
@@ -332,8 +332,13 @@ class CNMF(object):
                 perform analysis only on a part of the FOV
             include_eval (bool)
                 flag for performing component evaluation
+            output_dir (str)
+                directory to save the outputs
+            return_mc (bool)
+                flag to return motion correction object
         Returns:
             cnmf object with the current estimates
+            (optional) motion correction object
         """
         logger = logging.getLogger("caiman")
         if indices is None:
@@ -345,6 +350,13 @@ class CNMF(object):
         else:
             logger.error(f"Error: File not found, with file list:\n{fnames[0]}")
             raise Exception('File not found!')
+
+        caiman_temp = os.environ.get("CAIMAN_TEMP")
+        if output_dir is not None:
+            # update CAIMAN_TEMP to point to `output_dir`
+            output_dir = pathlib.Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            os.environ["CAIMAN_TEMP"] = str(output_dir)
 
         base_name = pathlib.Path(fnames[0]).stem + "_memmap_"
         if extension == '.mmap':
@@ -388,20 +400,31 @@ class CNMF(object):
         fit_cnm = self.fit(images, indices=indices)
         Cn = caiman.summary_images.local_correlations(images[::max(T//1000, 1)], swap_dim=False)
         Cn[np.isnan(Cn)] = 0
-        fit_cnm.save(fname_new[:-5] + '_init.hdf5')
+        fname_init_hdf5 = fname_new[:-5] + '_init.hdf5'
+        fit_cnm.save(fname_init_hdf5)
         # Rerun seeded CNMF on accepted patches to refine and perform deconvolution
         cnm2 = fit_cnm.refit(images, dview=self.dview)
         cnm2.estimates.evaluate_components(images, cnm2.params, dview=self.dview)
         # Extract DF/F values
         cnm2.estimates.detrend_df_f(quantileMin=8, frames_window=250)
         cnm2.estimates.Cn = Cn
-        cnm2.save(cnm2.mmap_file[:-4] + 'hdf5')
+        fname_hdf5 = cnm2.mmap_file[:-4] + 'hdf5'
+        cnm2.save(fname_hdf5)
 
         # XXX Why are we stopping the cluster here? What started it? Why remove log files?
         caiman.cluster.stop_server(dview=self.dview)
         log_files = glob.glob('*_LOG_*')
         for log_file in log_files:
             os.remove(log_file)
+
+        # revert CAIMAN_TEMP to its original value
+        if caiman_temp is not None:
+            os.environ["CAIMAN_TEMP"] = caiman_temp
+        else:
+            del os.environ["CAIMAN_TEMP"]
+
+        if return_mc & motion_correct:
+            return cnm2, mc
 
         return cnm2
 
